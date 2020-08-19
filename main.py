@@ -42,7 +42,7 @@ async def get_api_docs():
     return response
 
 ## Social ENDPOINTS!! ##
-@app.get('/social/latest', response_model=LatestSocial)
+@app.get('/social/latest', response_model=List[LatestSocial])
 async def get_latest():
     query = "SELECT run_cd AS type, lst_success_dt AS last_update FROM cre_last_success_run_dt;"
     return await database.fetch_all(query=query)
