@@ -1,0 +1,15 @@
+
+name: Build Docker Images to Github Packages
+on: [push]
+jobs:
+    build-api:
+        runs-on: ubuntu-latest
+        steps:
+        - uses: actions/checkout@master
+        - name: Publish API to Github Packages
+          uses: elgohr/Publish-Docker-Github-Action@master
+          with:
+            name: stlrda/social-api/social-api
+            username: ${{ github.actor }}
+            password: ${{ secrets.TOKEN }}
+            registry: docker.pkg.github.com
