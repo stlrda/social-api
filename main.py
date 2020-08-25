@@ -2,6 +2,7 @@
 import sqlalchemy
 import databases
 import json
+import re
 
 from datetime import date
 from pydantic import BaseModel
@@ -46,6 +47,42 @@ async def get_api_docs():
 async def get_latest():
     query = "SELECT run_cd AS type, lst_success_dt AS last_update FROM cre_last_success_run_dt;"
     return await database.fetch_all(query=query)
+
+@app.get('/social/covid', response_model=List[CovidSocial])
+async def get_covid(date: Optional[str] = None):
+    
+    if date == None:
+        date = 'Null'
+    else:
+        if bool(re.match(r'[0-9]{4}-[0-9]{2}-[0-9]{2}', date)) == False: 
+            raise HTTPException(status_code=400, detail="Please enter your date in 'YYYY-MM-DD' Format")
+
+        date_query = '''SELECT DISTINCT report_date 
+                        FROM cre_vu_covid_county'''
+        date_objs = await database.fetch_all(query=date_query) 
+
+        valid_dates = [] 
+        for value in date_objs:
+            valid_dates.append(str(value['report_date']))
+
+        if date not in valid_dates:
+            raise HTTPException(status_code=400, detail="No records for that date exist")
+
+        date = "'"+date+"'"
+
+    query = f'''SELECT * 
+                FROM cre_vu_covid_county 
+                WHERE report_date = COALESCE({date},(SELECT MAX(report_date) FROM cre_vu_covid_county))'''
+    return await database.fetch_all(query=query)
+
+# @app.get('/social/census/{CensusInput}', response_model=List[CensusSocial])
+# async def get_census(CensusInput: str):
+
+#     query = f'''SELECT census.geo_id, CONCAT(county_nm, ', ', state_nm) as County, {CensusInput}
+#                 FROM cre_census_data_by_county_yr2018 AS census
+#                 JOIN lkup_areas_of_intr_geo_scope as lkup
+#                 ON census.geo_id = lkup.geo_id;'''
+#     return await database.fetch_all(query=query)
 
 ## Modify API Docs ##
 def api_docs():
