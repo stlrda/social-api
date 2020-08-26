@@ -4,7 +4,7 @@ import databases
 import json
 import re
 
-from datetime import date
+from datetime import date, datetime as dt
 from pydantic import BaseModel
 from fastapi import FastAPI, Request, Depends, BackgroundTasks, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,15 +23,15 @@ async def validate_dates(date):
                     FROM cre_vu_covid_county;'''
 
     if bool(re.match(r'[0-9]{4}-[0-9]{2}-[0-9]{2}', date)) == False: 
-        raise HTTPException(status_code=400, detail="Please enter your date in 'YYYY-MM-DD' Format")
+        raise HTTPException(status_code=400, detail=f"Your selected date {date} does not fit the required 'YYYY-MM-DD' formatting.")
     else:
         date_objs = await database.fetch_all(query=date_query) 
 
-        for value in date_objs:
-            valid_dates.append(str(value['report_date']))
+        for obj in date_objs:
+            valid_dates.append(str(obj['report_date']))
         
         if date not in valid_dates:
-                raise HTTPException(status_code=400, detail="No records for that date exist")
+            raise HTTPException(status_code=400, detail=f"No records for {date} exist.  Records start on 2020-01-24 and new data is usually available within 2 days of the present date.")
 
 ## Load Database Configuration ##
 database = databases.Database(DATABASE_URL)
@@ -72,31 +72,53 @@ async def get_covid_data(date: Optional[str] = None):
     If no date is provided it will return the data from the most recent date in the database."""
 
     if date == None:
-        date = 'Null'
+        query = '''SELECT * 
+                    FROM cre_vu_covid_county 
+                    WHERE report_date = (SELECT MAX(report_date) FROM cre_vu_covid_county);'''
+        return await database.fetch_all(query=query)
     else:
         await validate_dates(date)
-        date = "'"+date+"'"
-
-    query = f'''SELECT * 
-                FROM cre_vu_covid_county 
-                WHERE report_date = COALESCE({date},(SELECT MAX(report_date) FROM cre_vu_covid_county));'''
-
-    return await database.fetch_all(query=query)
+        date = dt.fromisoformat(date)
+        values = {'date': date}
+        query = '''SELECT * 
+                    FROM cre_vu_covid_county 
+                    WHERE report_date = :date;'''
+        return await database.fetch_all(query=query, values=values)
 
 @app.get('/social/covid/{county}', response_model=List[CovidSocial])
-async def get_covid_data_time_series(county: str, date: Optional[str] = None):
+async def get_covid_data_time_series(county: str, startdate: Optional[str] = None, enddate: Optional[str] = None):
     """This route will return all the covid information for a specific county (referenced by geo_id) that was gathered between a start and end date.
     If dates are not provided it will return all data present for the specified county that was gathered in the month previous to the most recent data in the database."""
 
-    values = {'county': county}
+    default_values = {'county': county}
+    
+    if startdate == None or enddate == None :
+        query = '''SELECT * FROM cre_vu_covid_county
+                    WHERE date_part('year', report_date) = (SELECT date_part('year', (lst_success_dt - INTERVAL '1 month')) FROM cre_last_success_run_dt WHERE run_cd = 'WKLY_ALL')
+                    AND date_part('month', report_date) = (SELECT date_part('month', (lst_success_dt - INTERVAL '1 month')) FROM cre_last_success_run_dt WHERE run_cd = 'WKLY_ALL')
+                    AND geo_id = :county
+                    ORDER BY report_date;'''
+        
+        return await database.fetch_all(query=query, values=default_values)
 
-    query = f'''SELECT * FROM cre_vu_covid_county
-                WHERE date_part('year', report_date) = (SELECT date_part('year', (lst_success_dt - INTERVAL '1 month')) FROM cre_last_success_run_dt WHERE run_cd = 'WKLY_ALL')
-                AND date_part('month', report_date) = (SELECT date_part('month', (lst_success_dt - INTERVAL '1 month')) FROM cre_last_success_run_dt WHERE run_cd = 'WKLY_ALL')
-                AND geo_id = :county
-                ORDER BY report_date;'''
+    else:
+        await validate_dates(startdate)
+        await validate_dates(enddate)
+        
+        startdate = dt.fromisoformat(startdate)
+        enddate = dt.fromisoformat(enddate)
 
-    return await database.fetch_all(query=query, values=values)
+        if  (startdate) > (enddate):
+            raise HTTPException(status_code=400, detail=f"Your start date needs to be before your end date.")
+
+        date_range_values = {'county': county, 'startdate':startdate, 'enddate': enddate}
+        
+        query = '''SELECT * FROM cre_vu_covid_county
+                    WHERE report_date BETWEEN :startdate AND :enddate
+                    AND geo_id = :county
+                    ORDER BY report_date;'''
+        
+        return await database.fetch_all(query=query, values=date_range_values)
 
 # @app.get('/social/census/{CensusInput}', response_model=List[CensusSocial])
 # async def get_census(CensusInput: str):
