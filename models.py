@@ -20,7 +20,7 @@ class CovidSocial(BaseModel):
     mortality_rate: float
     new_deaths: int
     death_avg: float
-    case_fatality_rate: float
+    case_fatality_rate: Optional[float]
 
 class CensusSocial(BaseModel):
     geo_id: int

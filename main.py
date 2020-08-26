@@ -17,6 +17,22 @@ from config import DATABASE_URL
 # import the base models
 from models import *
 
+async def validate_dates(date):
+    valid_dates = []
+    date_query = '''SELECT DISTINCT report_date 
+                    FROM cre_vu_covid_county;'''
+
+    if bool(re.match(r'[0-9]{4}-[0-9]{2}-[0-9]{2}', date)) == False: 
+        raise HTTPException(status_code=400, detail="Please enter your date in 'YYYY-MM-DD' Format")
+    else:
+        date_objs = await database.fetch_all(query=date_query) 
+
+        for value in date_objs:
+            valid_dates.append(str(value['report_date']))
+        
+        if date not in valid_dates:
+                raise HTTPException(status_code=400, detail="No records for that date exist")
+
 ## Load Database Configuration ##
 database = databases.Database(DATABASE_URL)
 
@@ -45,35 +61,42 @@ async def get_api_docs():
 ## Social ENDPOINTS!! ##
 @app.get('/social/latest', response_model=List[LatestSocial])
 async def get_latest():
+    """This route will return the most recent dates that data has been added to the database."""
+    
     query = "SELECT run_cd AS type, lst_success_dt AS last_update FROM cre_last_success_run_dt;"
     return await database.fetch_all(query=query)
 
 @app.get('/social/covid', response_model=List[CovidSocial])
-async def get_covid(date: Optional[str] = None):
-    
+async def get_covid_data(date: Optional[str] = None):
+    """This route will return all the covid data gathered for all counties for a given date.
+    If no date is provided it will return the data from the most recent date in the database."""
+
     if date == None:
         date = 'Null'
     else:
-        if bool(re.match(r'[0-9]{4}-[0-9]{2}-[0-9]{2}', date)) == False: 
-            raise HTTPException(status_code=400, detail="Please enter your date in 'YYYY-MM-DD' Format")
-
-        date_query = '''SELECT DISTINCT report_date 
-                        FROM cre_vu_covid_county'''
-        date_objs = await database.fetch_all(query=date_query) 
-
-        valid_dates = [] 
-        for value in date_objs:
-            valid_dates.append(str(value['report_date']))
-
-        if date not in valid_dates:
-            raise HTTPException(status_code=400, detail="No records for that date exist")
-
+        await validate_dates(date)
         date = "'"+date+"'"
 
     query = f'''SELECT * 
                 FROM cre_vu_covid_county 
-                WHERE report_date = COALESCE({date},(SELECT MAX(report_date) FROM cre_vu_covid_county))'''
+                WHERE report_date = COALESCE({date},(SELECT MAX(report_date) FROM cre_vu_covid_county));'''
+
     return await database.fetch_all(query=query)
+
+@app.get('/social/covid/{county}', response_model=List[CovidSocial])
+async def get_covid_data_time_series(county: str, date: Optional[str] = None):
+    """This route will return all the covid information for a specific county (referenced by geo_id) that was gathered between a start and end date.
+    If dates are not provided it will return all data present for the specified county that was gathered in the month previous to the most recent data in the database."""
+
+    values = {'county': county}
+
+    query = f'''SELECT * FROM cre_vu_covid_county
+                WHERE date_part('year', report_date) = (SELECT date_part('year', (lst_success_dt - INTERVAL '1 month')) FROM cre_last_success_run_dt WHERE run_cd = 'WKLY_ALL')
+                AND date_part('month', report_date) = (SELECT date_part('month', (lst_success_dt - INTERVAL '1 month')) FROM cre_last_success_run_dt WHERE run_cd = 'WKLY_ALL')
+                AND geo_id = :county
+                ORDER BY report_date;'''
+
+    return await database.fetch_all(query=query, values=values)
 
 # @app.get('/social/census/{CensusInput}', response_model=List[CensusSocial])
 # async def get_census(CensusInput: str):
