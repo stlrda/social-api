@@ -22,8 +22,12 @@ class CovidSocial(BaseModel):
     death_avg: float
     case_fatality_rate: Optional[float]
 
-class CensusSocial(BaseModel):
-    geo_id: int
-    county: str
-    est_pop_age_65pl: Optional[int]
-    est_pop_wth_dsablty: Optional[int]
+class UnemploymentSocial(BaseModel):
+    geo_id: str
+    month_last_date: date
+    state_nm: str
+    county_nm: str
+    labor_force: int
+    employed: int
+    unemployed: int
+    unemployed_rate: float

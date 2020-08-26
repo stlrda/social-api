@@ -17,21 +17,43 @@ from config import DATABASE_URL
 # import the base models
 from models import *
 
-async def validate_dates(date):
-    valid_dates = []
-    date_query = '''SELECT DISTINCT report_date 
-                    FROM cre_vu_covid_county;'''
+# Validate the dates passed in as parameters.  Enforces formatting, valid dates, and valid date ranges depending on route
+async def validate_dates(date, qryType = 'covid'):
 
+    # enforce correct formatting
     if bool(re.match(r'[0-9]{4}-[0-9]{2}-[0-9]{2}', date)) == False: 
-        raise HTTPException(status_code=400, detail=f"Your selected date {date} does not fit the required 'YYYY-MM-DD' formatting.")
+        raise HTTPException(status_code=400, detail=f"{date} does not fit the required 'YYYY-MM-DD' formatting.")
     else:
-        date_objs = await database.fetch_all(query=date_query) 
-
-        for obj in date_objs:
-            valid_dates.append(str(obj['report_date']))
+        # enforce that date is valid
+        try:
+            dateISO = dt.fromisoformat(date)
+        except:
+            raise HTTPException(status_code=400, detail=f"{date} is not a valid date.")
         
-        if date not in valid_dates:
-            raise HTTPException(status_code=400, detail=f"No records for {date} exist.  Records start on 2020-01-24 and new data is usually available within 2 days of the present date.")
+        # enforce date falls within date range for covid data
+        if qryType == 'covid':
+            
+            valid_dates = []
+            date_query = '''SELECT DISTINCT report_date FROM cre_vu_covid_county;'''
+            date_objs = await database.fetch_all(query=date_query) 
+
+            for obj in date_objs:
+                valid_dates.append(str(obj['report_date']))
+            
+            if date not in valid_dates:
+                raise HTTPException(status_code=400, detail=f"No records for {date} exist.  Records start on 2020-01-24 and new data is usually available within 2 days of the present date.")
+
+        # enforce date falls within date range for unemployment data
+        elif qryType == 'unemploymentMonthly':
+            
+            date_query = '''SELECT MAX(month_last_date) FROM cre_vu_bls_unemployment_data;'''
+            latest_date = await database.fetch_one(query=date_query) 
+
+            if dateISO < dt.fromisoformat('2019-04-01') or dateISO > dt.fromisoformat(str(latest_date['max'])):
+                raise HTTPException(status_code=400, detail=f"No records for {date} exist.  Records start on '2019-04-01' and new data is added at the end of each month.")
+
+        else:
+            raise HTTPException(status_code=400, detail=f"Unknown Query Type")
 
 ## Load Database Configuration ##
 database = databases.Database(DATABASE_URL)
@@ -94,8 +116,8 @@ async def get_covid_data_time_series(county: str, startdate: Optional[str] = Non
     
     if startdate == None or enddate == None :
         query = '''SELECT * FROM cre_vu_covid_county
-                    WHERE date_part('year', report_date) = (SELECT date_part('year', (lst_success_dt - INTERVAL '1 month')) FROM cre_last_success_run_dt WHERE run_cd = 'WKLY_ALL')
-                    AND date_part('month', report_date) = (SELECT date_part('month', (lst_success_dt - INTERVAL '1 month')) FROM cre_last_success_run_dt WHERE run_cd = 'WKLY_ALL')
+                    WHERE date_part('year', report_date) = (SELECT date_part('year', (lst_success_dt - INTERVAL '1 month')) FROM cre_last_success_run_dt WHERE run_cd = 'DLY_ALL')
+                    AND date_part('month', report_date) = (SELECT date_part('month', (lst_success_dt - INTERVAL '1 month')) FROM cre_last_success_run_dt WHERE run_cd = 'DLY_ALL')
                     AND geo_id = :county
                     ORDER BY report_date;'''
         
@@ -120,14 +142,27 @@ async def get_covid_data_time_series(county: str, startdate: Optional[str] = Non
         
         return await database.fetch_all(query=query, values=date_range_values)
 
-# @app.get('/social/census/{CensusInput}', response_model=List[CensusSocial])
-# async def get_census(CensusInput: str):
+@app.get('/social/unemployment/data', response_model=List[UnemploymentSocial])
+async def get_monthly_unemployment_data(date: Optional[str] = None):
 
-#     query = f'''SELECT census.geo_id, CONCAT(county_nm, ', ', state_nm) as County, {CensusInput}
-#                 FROM cre_census_data_by_county_yr2018 AS census
-#                 JOIN lkup_areas_of_intr_geo_scope as lkup
-#                 ON census.geo_id = lkup.geo_id;'''
-#     return await database.fetch_all(query=query)
+    if date == None:
+        query = '''SELECT * 
+                    FROM cre_vu_bls_unemployment_data 
+                    WHERE month_last_date = (SELECT MAX(month_last_date) FROM cre_vu_bls_unemployment_data);'''
+
+        return await database.fetch_all(query=query)
+    
+    else:
+        await validate_dates(date, qryType = 'unemploymentMonthly')
+        date = dt.fromisoformat(date)
+        values = {'dateYr': date.year, 'dateMon': date.month}
+        
+        query = '''SELECT * 
+                    FROM cre_vu_bls_unemployment_data
+                    WHERE date_part('year', month_last_date) = :dateYr
+                    AND date_part('month', month_last_date) =  :dateMon;'''
+
+        return await database.fetch_all(query=query, values=values)
 
 ## Modify API Docs ##
 def api_docs():
