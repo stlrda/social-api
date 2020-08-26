@@ -1,6 +1,11 @@
 astroid==2.4.2
+asyncpg==0.20.1
+certifi==2020.6.20
+click==7.1.2
+colorama==0.4.3
 databases==0.3.2
 fastapi==0.61.0
+h11==0.9.0
 isort==4.3.21
 lazy-object-proxy==1.4.3
 mccabe==0.6.1
@@ -11,11 +16,7 @@ six==1.15.0
 SQLAlchemy==1.3.19
 starlette==0.13.6
 toml==0.10.1
-wrapt==1.12.1
-asyncpg==0.20.1
-certifi==2020.6.20
-click==7.1.2
-h11==0.9.0
 uvicorn==0.11.7
 websockets==8.1
 wincertstore==0.2
+wrapt==1.12.1
