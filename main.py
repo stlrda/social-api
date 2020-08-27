@@ -52,13 +52,11 @@ async def get_latest():
     query = "SELECT run_cd AS type, lst_success_dt AS last_update FROM cre_last_success_run_dt;"
     return await database.fetch_all(query=query)
 
-@app.get('/social/covid', response_model=List[CovidSocial])
+@app.get('/social/covid', response_model=List[CovidCounty])
 async def get_covid_data(date: Optional[date] = None):
     """This route will return all the covid data gathered for all counties for a given date.
     If no date is provided it will return the data from the most recent date in the database."""
     
-    values = {'date': date}
-
     if date == None:
         query = '''SELECT * 
                     FROM cre_vu_covid_county 
@@ -66,20 +64,21 @@ async def get_covid_data(date: Optional[date] = None):
         return await database.fetch_all(query=query)
     else:
         await validate_dates(date)
+        
+        values = {'date': date}
         query = '''SELECT * 
                     FROM cre_vu_covid_county 
                     WHERE report_date = :date;'''
         return await database.fetch_all(query=query, values=values)
 
-@app.get('/social/covid/{county}', response_model=List[CovidSocial])
+@app.get('/social/covid/{county}', response_model=List[CovidCounty])
 async def get_covid_data_time_series(county: str, startdate: Optional[date] = None, enddate: Optional[date] = None):
     """This route will return all the covid information for a specific county (referenced by geo_id) that was gathered between a start and end date.
     If dates are not provided it will return all data present for the specified county that was gathered in the month previous to the most recent data in the database."""
 
-    default_values = {'county': county}
-    date_range_values = {'county': county, 'startdate': startdate, 'enddate': enddate}
-    
     if startdate == None or enddate == None :
+        
+        default_values = {'county': county}
         query = '''SELECT * FROM cre_vu_covid_county
                     WHERE date_part('year', report_date) = (SELECT date_part('year', (lst_success_dt - INTERVAL '1 month')) FROM cre_last_success_run_dt WHERE run_cd = 'DLY_ALL')
                     AND date_part('month', report_date) = (SELECT date_part('month', (lst_success_dt - INTERVAL '1 month')) FROM cre_last_success_run_dt WHERE run_cd = 'DLY_ALL')
@@ -94,7 +93,8 @@ async def get_covid_data_time_series(county: str, startdate: Optional[date] = No
         
         if  (startdate) > (enddate):
             raise HTTPException(status_code=400, detail=f"Your start date needs to be before your end date.")
-
+        
+        date_range_values = {'county': county, 'startdate': startdate, 'enddate': enddate}
         query = '''SELECT * FROM cre_vu_covid_county
                     WHERE report_date BETWEEN :startdate AND :enddate
                     AND geo_id = :county
@@ -102,10 +102,8 @@ async def get_covid_data_time_series(county: str, startdate: Optional[date] = No
         
         return await database.fetch_all(query=query, values=date_range_values)
 
-@app.get('/social/unemployment/data', response_model=List[UnemploymentSocial])
+@app.get('/social/unemployment/data', response_model=List[UnemploymentDataCounty])
 async def get_monthly_unemployment_data(date: Optional[date] = None):
-
-    values = {'dateYr': date.year, 'dateMon': date.month}
 
     if date == None:
         query = '''SELECT * 
@@ -116,7 +114,7 @@ async def get_monthly_unemployment_data(date: Optional[date] = None):
     
     else:
         await validate_dates(date, qryType = 'unemploymentMonthly')
-
+        values = {'dateYr': date.year, 'dateMon': date.month}
         query = '''SELECT * 
                     FROM cre_vu_bls_unemployment_data
                     WHERE date_part('year', month_last_date) = :dateYr
@@ -124,8 +122,8 @@ async def get_monthly_unemployment_data(date: Optional[date] = None):
 
         return await database.fetch_all(query=query, values=values)
 
-@app.get('/social/unemployment/claims', response_model=List[UnemploymentClaimsSocial])
-async def get_weekly_unemployment_claims(date: Optional[date] = None):
+@app.get('/social/unemployment/claims/county', response_model=List[UnemploymentClaimsCounty])
+async def get_weekly_claims_county(date: Optional[date] = None):
 
     values = {'date': date}
 
@@ -137,10 +135,31 @@ async def get_weekly_unemployment_claims(date: Optional[date] = None):
         return await database.fetch_all(query=query)
     
     else:
-        await validate_dates(date, qryType = 'unemploymentClaims')
+        await validate_dates(date, qryType = 'claimsCounty')
 
         query = '''SELECT * 
                     FROM cre_vu_unemployment_clms
+                    WHERE period_end_date BETWEEN :date AND (:date + INTERVAL '6 day');'''
+        
+        return await database.fetch_all(query=query, values=values)
+
+@app.get('/social/unemployment/claims/zip', response_model=List[UnemploymentClaimsZip])
+async def get_weekly_claims_zip(date: Optional[date] = None):
+
+    values = {'date': date}
+
+    if date == None:
+        query = '''SELECT * 
+                    FROM cre_vu_unemployment_clms
+                    WHERE period_end_date = (SELECT MAX(period_end_date) FROM cre_vu_unemployment_clms_map_2_zip);'''
+        
+        return await database.fetch_all(query=query)
+    
+    else:
+        await validate_dates(date, qryType = 'claimsZip')
+
+        query = '''SELECT * 
+                    FROM cre_vu_unemployment_clms_map_2_zip
                     WHERE period_end_date BETWEEN :date AND (:date + INTERVAL '6 day');'''
         
         return await database.fetch_all(query=query, values=values)
