@@ -17,7 +17,7 @@ from config import DATABASE_URL
 # import the base models
 from models import *
 
-# Validate the dates passed in as parameters.  Enforces formatting, valid dates, and valid date ranges depending on route
+# This function validates the dates passed in as parameters.  Enforces formatting, valid dates, and valid date ranges depending on route
 async def validate_dates(date, qryType = 'covid'):
 
     # enforce correct formatting
@@ -51,6 +51,14 @@ async def validate_dates(date, qryType = 'covid'):
 
             if dateISO < dt.fromisoformat('2019-04-01') or dateISO > dt.fromisoformat(str(latest_date['max'])):
                 raise HTTPException(status_code=400, detail=f"No records for {date} exist.  Records start on '2019-04-01' and new data is added at the end of each month.")
+
+        elif qryType == 'unemploymentClaims':
+            
+            date_query = '''SELECT MAX(period_end_date) FROM cre_vu_unemployment_clms;;'''
+            latest_date = await database.fetch_one(query=date_query) 
+
+            if dateISO < dt.fromisoformat('2018-01-06') or dateISO > dt.fromisoformat(str(latest_date['max'])):
+                raise HTTPException(status_code=400, detail=f"No records for {date} exist.  Records start on '2018-01-06' and new data is added weekly.")
 
         else:
             raise HTTPException(status_code=400, detail=f"Unknown Query Type")
@@ -161,6 +169,27 @@ async def get_monthly_unemployment_data(date: Optional[str] = None):
                     FROM cre_vu_bls_unemployment_data
                     WHERE date_part('year', month_last_date) = :dateYr
                     AND date_part('month', month_last_date) =  :dateMon;'''
+
+        return await database.fetch_all(query=query, values=values)
+
+@app.get('/social/unemployment/claims', response_model=List[UnemploymentClaimsSocial])
+async def get_weekly_unemployment_claims(date: Optional[str] = None):
+
+    if date == None:
+        query = '''SELECT * 
+                    FROM cre_vu_unemployment_clms
+                    WHERE period_end_date = (SELECT MAX(period_end_date) FROM cre_vu_unemployment_clms);'''
+
+        return await database.fetch_all(query=query)
+    
+    else:
+        await validate_dates(date, qryType = 'unemploymentClaims')
+        date = dt.fromisoformat(date)
+        values = {'date': date}
+
+        query = '''SELECT * 
+                    FROM cre_vu_unemployment_clms
+                    WHERE period_end_date BETWEEN :date AND (:date + INTERVAL '6 day');'''
 
         return await database.fetch_all(query=query, values=values)
 

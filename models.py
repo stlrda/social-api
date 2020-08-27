@@ -31,3 +31,10 @@ class UnemploymentSocial(BaseModel):
     employed: int
     unemployed: int
     unemployed_rate: float
+
+class UnemploymentClaimsSocial(BaseModel):
+    period_end_date: date
+    geo_id: str
+    state_nm: str
+    county_nm: str
+    claims_cnt: int
