@@ -52,6 +52,7 @@ async def get_latest():
     query = "SELECT run_cd AS type, lst_success_dt AS last_update FROM cre_last_success_run_dt;"
     return await database.fetch_all(query=query)
 
+## Covid data for all counties by date ##
 @app.get('/social/covid', response_model=List[CovidCounty])
 async def get_covid_data(date: Optional[date] = None):
     """This route will return all the covid data gathered for all counties for a given date.
@@ -71,6 +72,7 @@ async def get_covid_data(date: Optional[date] = None):
                     WHERE report_date = :date;'''
         return await database.fetch_all(query=query, values=values)
 
+## Covid data for a single county by date range ##
 @app.get('/social/covid/{county}', response_model=List[CovidCounty])
 async def get_covid_data_time_series(county: str, startdate: Optional[date] = None, enddate: Optional[date] = None):
     """This route will return all the covid information for a specific county (referenced by geo_id) that was gathered between a start and end date.
@@ -102,8 +104,9 @@ async def get_covid_data_time_series(county: str, startdate: Optional[date] = No
         
         return await database.fetch_all(query=query, values=date_range_values)
 
-@app.get('/social/unemployment/data', response_model=List[UnemploymentDataCounty])
-async def get_monthly_unemployment_data(date: Optional[date] = None):
+## Unemployment Data from BLS by county ##
+@app.get('/social/unemployment/data/county', response_model=List[UnemploymentDataCounty])
+async def get_unemployment_data_county(date: Optional[date] = None):
 
     if date == None:
         query = '''SELECT * 
@@ -113,7 +116,7 @@ async def get_monthly_unemployment_data(date: Optional[date] = None):
         return await database.fetch_all(query=query)
     
     else:
-        await validate_dates(date, qryType = 'unemploymentMonthly')
+        await validate_dates(date, qryType = 'unemploymentCounty')
         values = {'dateYr': date.year, 'dateMon': date.month}
         query = '''SELECT * 
                     FROM cre_vu_bls_unemployment_data
@@ -122,6 +125,28 @@ async def get_monthly_unemployment_data(date: Optional[date] = None):
 
         return await database.fetch_all(query=query, values=values)
 
+## Unemployment Data from BLS by zip ##
+@app.get('/social/unemployment/data/zip', response_model=List[UnemploymentDataZip])
+async def get_unemployment_data_zip(date: Optional[date] = None):
+
+    if date == None:
+        query = '''SELECT * 
+                    FROM cre_vu_bls_unemployment_map_2_zip
+                    WHERE month_last_date = (SELECT MAX(month_last_date) FROM cre_vu_bls_unemployment_map_2_zip);'''
+
+        return await database.fetch_all(query=query)
+    
+    else:
+        await validate_dates(date, qryType = 'unemploymentZip')
+        values = {'dateYr': date.year, 'dateMon': date.month}
+        query = '''SELECT * 
+                    FROM cre_vu_bls_unemployment_map_2_zip
+                    WHERE date_part('year', month_last_date) = :dateYr
+                    AND date_part('month', month_last_date) =  :dateMon;'''
+
+        return await database.fetch_all(query=query, values=values)
+
+## Unemployment claims by county ##
 @app.get('/social/unemployment/claims/county', response_model=List[UnemploymentClaimsCounty])
 async def get_weekly_claims_county(date: Optional[date] = None):
 
@@ -143,6 +168,7 @@ async def get_weekly_claims_county(date: Optional[date] = None):
         
         return await database.fetch_all(query=query, values=values)
 
+## Unemployment claims by zip ##
 @app.get('/social/unemployment/claims/zip', response_model=List[UnemploymentClaimsZip])
 async def get_weekly_claims_zip(date: Optional[date] = None):
 

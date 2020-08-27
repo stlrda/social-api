@@ -30,7 +30,15 @@ class UnemploymentDataCounty(BaseModel):
     labor_force: int
     employed: int
     unemployed: int
-    unemployed_rate: float
+    unemployed_rate: Optional[float]
+
+class UnemploymentDataZip(BaseModel):
+    zip_cd: str
+    month_last_date: date
+    labor_force: float
+    employed: float
+    unemployed: float
+    unemployed_rate: Optional[float]
 
 class UnemploymentClaimsCounty(BaseModel):
     period_end_date: date
