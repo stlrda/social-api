@@ -7,7 +7,7 @@ class LatestSocial(BaseModel):
     type: str
     last_update: date
 
-class CovidSocial(BaseModel):
+class CovidCounty(BaseModel):
     report_date: date
     state_nm: str
     county_nm: str
@@ -22,7 +22,7 @@ class CovidSocial(BaseModel):
     death_avg: float
     case_fatality_rate: Optional[float]
 
-class UnemploymentSocial(BaseModel):
+class UnemploymentDataCounty(BaseModel):
     geo_id: str
     month_last_date: date
     state_nm: str
@@ -30,4 +30,28 @@ class UnemploymentSocial(BaseModel):
     labor_force: int
     employed: int
     unemployed: int
-    unemployed_rate: float
+    unemployed_rate: Optional[float]
+
+class UnemploymentDataZip(BaseModel):
+    zip_cd: str
+    month_last_date: date
+    labor_force: float
+    employed: float
+    unemployed: float
+    unemployed_rate: Optional[float]
+
+class UnemploymentClaimsCounty(BaseModel):
+    period_end_date: date
+    geo_id: str
+    state_nm: str
+    county_nm: str
+    claims_cnt: int
+
+class UnemploymentClaimsZip(BaseModel):
+    zip_cd: str
+    period_end_date: date
+    claims_cnt: int
+
+class CensusCategories(BaseModel):
+    geo_id: str
+    category: float
