@@ -190,6 +190,54 @@ async def get_weekly_claims_zip(date: Optional[date] = None):
         
         return await database.fetch_all(query=query, values=values)
 
+## Unemployment claims by zip ##
+@app.get('/social/census', response_model=List[CensusCategories])
+async def get_census_categories(category:str):
+    
+    variables = {
+        'age_65+': 'est_pop_age_65pl',
+        'disability': 'est_pop_wth_dsablty',
+        'age_25+': 'est_pop_age_25pl',
+        'age_25+_hgh_schl_orls': 'est_pop_age_25pl_hgh_schl_orls',
+        'age_16+': 'est_pop_age_16pl',
+        'age_16+_laborforce': 'est_pop_age_16pl_in_lbr_frce_prop',
+        'age_16+_employed': 'est_pop_age_16pl_empld_prop',
+        'age_16+_unemployed': 'est_pop_age_16pl_unempl_rt',
+        'no_insurance': 'est_pop_wthout_hlth_insr',
+        'not_hispanic_latino': 'est_pop_not_hisp_latino',
+        'hispanic_latino': 'est_pop_hisp_latino',
+        'total_households': 'est_tot_hh',
+        'households_own': 'est_tot_hh_own_res',
+        'households_rent': 'est_tot_hh_rent_res',
+        'est_gini_ndx': 'est_gini_ndx',
+        'no_internet': 'est_pop_no_internet_access',
+        'commute_to_work': 'est_pop_commute_2_wrk',
+        'public_trans_to_work': 'est_pop_publ_trans_2_wrk',
+        'median_household_income_2018adj': 'est_mdn_hh_ncome_ttm_2018nfl_adj',
+        'median_per_capita_income_2018adj': 'est_mdn_percap_ncome_ttm_2018nfl_adj',
+        'est_pop_wth_knwn_pvrty_stts': 'est_pop_wth_knwn_pvrty_stts',
+        'est_pop_undr_pvrty_wth_knwn_pvrty_stts': 'est_pop_undr_pvrty_wth_knwn_pvrty_stts',
+        'white': 'est_pop_white',
+        'black': 'est_pop_blk',
+        'native_american': 'est_pop_am_ind',
+        'asian': 'est_pop_asian',
+        'hawaiian': 'est_pop_hwaiian',
+        'other': 'est_pop_othr',
+        '2+_race': 'est_pop_2pl_race',
+        'total_pop': 'est_tot_pop',
+        'imu_score': 'imu_score',
+        'rpl_themes_svi_ndx': 'rpl_themes_svi_ndx',
+        'area': 'area_sq_mi'
+        }
+
+    varlist = list(variables.keys())
+    if category not in varlist:
+        raise HTTPException(status_code=400, detail=f'Sorry {category} is not an acceptable variable.  Please choose from the following list {varlist}')
+
+    query = f'''SELECT geo_id, {variables[category]} as category FROM cre_vu_census_data_by_county_curr;'''
+    
+    return await database.fetch_all(query=query)
+
 ## Modify API Docs ##
 def api_docs():
     if app.openapi_schema:

@@ -51,3 +51,7 @@ class UnemploymentClaimsZip(BaseModel):
     zip_cd: str
     period_end_date: date
     claims_cnt: int
+
+class CensusCategories(BaseModel):
+    geo_id: str
+    category: float
