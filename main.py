@@ -47,7 +47,8 @@ async def get_api_docs():
 ## Social ENDPOINTS!! ##
 @app.get('/social/latest', response_model=List[LatestSocial])
 async def get_latest():
-    """This route will return the most recent dates that data has been added to the database."""
+    """This route will return the most recent dates that data has been added to the database.\n
+    Example: https://api.stldata.org/social/latest"""
     
     query = "SELECT run_cd AS type, lst_success_dt AS last_update FROM cre_last_success_run_dt;"
     return await database.fetch_all(query=query)
@@ -56,7 +57,8 @@ async def get_latest():
 @app.get('/social/covid', response_model=List[CovidCounty])
 async def get_covid_data(date: Optional[date] = None):
     """This route will return all the covid data gathered for all counties for a given date.
-    If no date is provided it will return the data from the most recent date in the database."""
+    If no date is provided it will return the data from the most recent date in the database.\n
+    Example: https://api.stldata.org/social/covid?date=2020-01-25"""
     
     if date == None:
         query = '''SELECT * 
@@ -75,8 +77,10 @@ async def get_covid_data(date: Optional[date] = None):
 ## Covid data for a single county by date range ##
 @app.get('/social/covid/{county}', response_model=List[CovidCounty])
 async def get_covid_data_time_series(county: str, startdate: Optional[date] = None, enddate: Optional[date] = None):
-    """This route will return all the covid information for a specific county (referenced by geo_id) that was gathered between a start and end date.
-    If dates are not provided it will return all data present for the specified county that was gathered in the month previous to the most recent data in the database."""
+    """This route will return all the covid information for a specific county (referenced by FIPS code) that was gathered between a startdate and enddate (dates are inclusive and both are required though they can be the same).
+    If dates are not provided it will return all data present for the specified county that was gathered in the month previous to the most recent data in the database (DLY_ALL from the /latest endpoint).\n
+    FIPS codes for all counties and states can be found here: https://transition.fcc.gov/oet/info/maps/census/fips/fips.txt\n
+    Example: https://api.stldata.org/social/covid/29189?startdate=2020-07-01&enddate=2020-07-04"""
 
     if startdate == None or enddate == None :
         
@@ -94,7 +98,7 @@ async def get_covid_data_time_series(county: str, startdate: Optional[date] = No
         await validate_dates(enddate)
         
         if  (startdate) > (enddate):
-            raise HTTPException(status_code=400, detail=f"Your start date needs to be before your end date.")
+            raise HTTPException(status_code=400, detail=f"Your startdate needs to be before or the same as enddate.")
         
         date_range_values = {'county': county, 'startdate': startdate, 'enddate': enddate}
         query = '''SELECT * FROM cre_vu_covid_county
@@ -107,7 +111,10 @@ async def get_covid_data_time_series(county: str, startdate: Optional[date] = No
 ## Unemployment Data from BLS by county ##
 @app.get('/social/unemployment/data/county', response_model=List[UnemploymentDataCounty])
 async def get_unemployment_data_county(date: Optional[date] = None):
-
+    '''This route will return all unemployment data gathered from the BLS for all MO & IL counties for a given month.
+    When a date is provided it will return the data for the month that date falls in.  If no date it given it will return the most recent data.\n
+    Example: https://api.stldata.org/social/unemployment/data/county?date=2020-03-28'''
+    
     if date == None:
         query = '''SELECT * 
                     FROM cre_vu_bls_unemployment_data 
@@ -128,7 +135,10 @@ async def get_unemployment_data_county(date: Optional[date] = None):
 ## Unemployment Data from BLS by zip ##
 @app.get('/social/unemployment/data/zip', response_model=List[UnemploymentDataZip])
 async def get_unemployment_data_zip(date: Optional[date] = None):
-
+    '''This route will return all unemployment data gathered from the BLS for all MO & IL zip codes for a given month.
+    When a date is provided it will return the data for the month that date falls in.  If no date it given it will return the most recent data.\n
+    Example: https://api.stldata.org/social/unemployment/data/zip'''
+    
     if date == None:
         query = '''SELECT * 
                     FROM cre_vu_bls_unemployment_map_2_zip
@@ -149,6 +159,9 @@ async def get_unemployment_data_zip(date: Optional[date] = None):
 ## Unemployment claims by county ##
 @app.get('/social/unemployment/claims/county', response_model=List[UnemploymentClaimsCounty])
 async def get_weekly_claims_county(date: Optional[date] = None):
+    '''This route will return all the unemployment claims from all counties in MO & IL for a given week.
+    When a date is provided it will return the data that was gathered during the 7 day period starting on that date.  If no date it given it will return the most recent data.\n
+    Example: https://api.stldata.org/social/unemployment/claims/county?date=2020-03-28'''
 
     values = {'date': date}
 
@@ -171,19 +184,20 @@ async def get_weekly_claims_county(date: Optional[date] = None):
 ## Unemployment claims by zip ##
 @app.get('/social/unemployment/claims/zip', response_model=List[UnemploymentClaimsZip])
 async def get_weekly_claims_zip(date: Optional[date] = None):
-
-    values = {'date': date}
+    '''This route will return all the unemployment claims from all zip codes in MO & IL for a given week.
+    When a date is provided it will return the data that was gathered during the 7 day period starting on that date.  If no date it given it will return the most recent data.\n
+    Example: https://api.stldata.org/social/unemployment/claims/zip'''
 
     if date == None:
         query = '''SELECT * 
-                    FROM cre_vu_unemployment_clms
+                    FROM cre_vu_unemployment_clms_map_2_zip
                     WHERE period_end_date = (SELECT MAX(period_end_date) FROM cre_vu_unemployment_clms_map_2_zip);'''
         
         return await database.fetch_all(query=query)
     
     else:
         await validate_dates(date, qryType = 'claimsZip')
-
+        values = {'date': date}
         query = '''SELECT * 
                     FROM cre_vu_unemployment_clms_map_2_zip
                     WHERE period_end_date BETWEEN :date AND (:date + INTERVAL '6 day');'''
@@ -193,16 +207,19 @@ async def get_weekly_claims_zip(date: Optional[date] = None):
 ## Unemployment claims by zip ##
 @app.get('/social/census', response_model=List[CensusCategories])
 async def get_census_categories(category:str):
+    '''When provided with a category variable this endpoint will return the value for that category from the most recent census data for all geo_ids within MO & IL.  If a category name is imporperly provided a list of all available variables will be returned\n
+    Example: https://api.stldata.org/social/census?category=age_65pl\n
+    Example: https://api.stldata.org/social/census?category=total_households\n'''
     
     variables = {
-        'age_65+': 'est_pop_age_65pl',
+        'age_65pl': 'est_pop_age_65pl',
         'disability': 'est_pop_wth_dsablty',
-        'age_25+': 'est_pop_age_25pl',
-        'age_25+_hgh_schl_orls': 'est_pop_age_25pl_hgh_schl_orls',
-        'age_16+': 'est_pop_age_16pl',
-        'age_16+_laborforce': 'est_pop_age_16pl_in_lbr_frce_prop',
-        'age_16+_employed': 'est_pop_age_16pl_empld_prop',
-        'age_16+_unemployed': 'est_pop_age_16pl_unempl_rt',
+        'age_25pl': 'est_pop_age_25pl',
+        'age_25pl_hgh_schl_orls': 'est_pop_age_25pl_hgh_schl_orls',
+        'age_16pl': 'est_pop_age_16pl',
+        'age_16pl_laborforce': 'est_pop_age_16pl_in_lbr_frce_prop',
+        'age_16pl_employed': 'est_pop_age_16pl_empld_prop',
+        'age_16pl_unemployed': 'est_pop_age_16pl_unempl_rt',
         'no_insurance': 'est_pop_wthout_hlth_insr',
         'not_hispanic_latino': 'est_pop_not_hisp_latino',
         'hispanic_latino': 'est_pop_hisp_latino',
@@ -223,7 +240,7 @@ async def get_census_categories(category:str):
         'asian': 'est_pop_asian',
         'hawaiian': 'est_pop_hwaiian',
         'other': 'est_pop_othr',
-        '2+_race': 'est_pop_2pl_race',
+        '2pl_race': 'est_pop_2pl_race',
         'total_pop': 'est_tot_pop',
         'imu_score': 'imu_score',
         'rpl_themes_svi_ndx': 'rpl_themes_svi_ndx',
